@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt";
@@ -88,3 +88,8 @@ app.post("/", async (req, res) => {
     res.status(500).send(err.message);
   }
 });
+
+// Ligar a aplicação do servidor para ouvir requisições
+
+const port = process.env.PORT || 5000;
+app.listen(port, () => console.log(`Servidor rodando na porta ${port}`));
