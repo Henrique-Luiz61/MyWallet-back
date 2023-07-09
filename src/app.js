@@ -5,6 +5,10 @@ import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt";
 import { v4 as uuid } from "uuid";
+import dayjs from "dayjs";
+
+// URL deploy do back-end:
+// https://mywallet-api-emzm.onrender.com
 
 // Criação do app
 const app = express();
@@ -32,8 +36,8 @@ app.post("/cadastro", async (req, res) => {
 
   const schemaUser = joi.object({
     name: joi.string().required(),
-    email: joi.email().required(),
-    password: joi.min(3).required(),
+    email: joi.string().email().required(),
+    password: joi.string().min(3).required(),
   });
 
   const validation = schemaUser.validate(req.body, { abortEarly: false });
@@ -45,7 +49,9 @@ app.post("/cadastro", async (req, res) => {
   const hash = bcrypt.hashSync(password, 10);
 
   try {
-    const user = await db.collection("users").findOne({ name: name });
+    const user = await db
+      .collection("users")
+      .findOne({ $or: [{ name: name }, { email: email }] });
     if (user) return res.status(409).send("Usuário já cadastrado!");
 
     await db
@@ -61,8 +67,8 @@ app.post("/", async (req, res) => {
   const { email, password } = req.body;
 
   const schemaLogin = joi.object({
-    email: joi.email().required(),
-    password: joi.min(3).required(),
+    email: joi.string().email().required(),
+    password: joi.string().min(3).required(),
   });
 
   const validation = schemaLogin.validate(req.body, { abortEarly: false });
@@ -89,7 +95,63 @@ app.post("/", async (req, res) => {
   }
 });
 
-// Ligar a aplicação do servidor para ouvir requisições
+app.get("/home", async (req, res) => {
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer ", "");
 
+  if (!token) return res.sendStatus(401);
+
+  try {
+    const session = await db.collection("sessions").findOne({ token: token });
+    if (!session) return res.sendStatus(401);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+app.post("/nova-transacao/:tipo", async (req, res) => {
+  const { tipo } = req.params;
+  const { descricao, valor } = req.body;
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer ", "");
+
+  if (!token) return res.sendStatus(401);
+
+  const schemaTransacao = joi.object({
+    tipo: joi.string().valid("entrada", "saida").required(),
+    descricao: joi.string().required(),
+    valor: joi.number().positive().required(),
+  });
+
+  const validation = schemaTransacao.validate(
+    { ...req.body, tipo: tipo },
+    { abortEarly: false }
+  );
+
+  if (validation.error)
+    return res
+      .status(422)
+      .send(validation.error.details.map((detail) => detail.message));
+
+  if (!Number.isInteger(valor))
+    return res.status(422).send("O valor deve ser do tipo float!");
+
+  try {
+    const session = await db.collection("sessions").findOne({ token: token });
+    if (!session) return res.sendStatus(401);
+
+    await db.collection("transacoes").insertOne({
+      token: token,
+      tipo: tipo,
+      descricao: descricao,
+      valor: valor,
+      data: dayjs().format("DD/MM"),
+    });
+
+    res.sendStatus(201);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log(`Servidor rodando na porta ${port}`));
