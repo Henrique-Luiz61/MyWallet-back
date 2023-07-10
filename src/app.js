@@ -87,7 +87,7 @@ app.post("/", async (req, res) => {
     const token = uuid();
     await db
       .collection("sessions")
-      .insertOne({ token: token, idUser: user._id });
+      .insertOne({ token: token, idUser: user._id, name: user.name });
 
     res.status(200).send(token);
   } catch (err) {
@@ -104,6 +104,13 @@ app.get("/home", async (req, res) => {
   try {
     const session = await db.collection("sessions").findOne({ token: token });
     if (!session) return res.sendStatus(401);
+
+    const transacoes = await db
+      .collection("transacoes")
+      .find({ name: session.name })
+      .toArray();
+
+    res.send(transacoes);
   } catch (err) {
     res.status(500).send(err.message);
   }
@@ -120,7 +127,7 @@ app.post("/nova-transacao/:tipo", async (req, res) => {
   const schemaTransacao = joi.object({
     tipo: joi.string().valid("entrada", "saida").required(),
     descricao: joi.string().required(),
-    valor: joi.number().positive().required(),
+    valor: joi.number().positive().precision(2).required(),
   });
 
   const validation = schemaTransacao.validate(
@@ -133,15 +140,17 @@ app.post("/nova-transacao/:tipo", async (req, res) => {
       .status(422)
       .send(validation.error.details.map((detail) => detail.message));
 
-  if (!Number.isInteger(valor))
+  if (Number.isInteger(valor) && valor % 10 !== 0)
     return res.status(422).send("O valor deve ser do tipo float!");
 
   try {
     const session = await db.collection("sessions").findOne({ token: token });
     if (!session) return res.sendStatus(401);
 
+    const user = await db.collection("users").findOne({ _id: session.idUser });
+
     await db.collection("transacoes").insertOne({
-      token: token,
+      name: user.name,
       tipo: tipo,
       descricao: descricao,
       valor: valor,
@@ -153,5 +162,18 @@ app.post("/nova-transacao/:tipo", async (req, res) => {
     res.status(500).send(err.message);
   }
 });
+
+app.delete("/home", async (req, res) => {
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer ", "");
+
+  try {
+    await db.collection("sessions").deleteOne({ token: token });
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log(`Servidor rodando na porta ${port}`));
