@@ -7,8 +7,7 @@ import bcrypt from "bcrypt";
 import { v4 as uuid } from "uuid";
 import dayjs from "dayjs";
 
-// URL deploy do back-end:
-// https://mywallet-api-emzm.onrender.com
+//fuser -k 5000/tcp
 
 // Criação do app
 const app = express();
@@ -89,7 +88,8 @@ app.post("/", async (req, res) => {
       .collection("sessions")
       .insertOne({ token: token, idUser: user._id, name: user.name });
 
-    res.status(200).send(token);
+    res.status(200).send({ token: token, userName: user.name });
+    console.log(res.data);
   } catch (err) {
     res.status(500).send(err.message);
   }
@@ -110,7 +110,17 @@ app.get("/home", async (req, res) => {
       .find({ name: session.name })
       .toArray();
 
-    res.send(transacoes);
+    let total = 0;
+
+    for (let i = 0; i < transacoes.length; i++) {
+      if (transacoes[i].tipo === "entrada") {
+        total = total + Number(transacoes[i].valor);
+      } else {
+        total = total - Number(transacoes[i].valor);
+      }
+    }
+
+    res.send({ transacoes: transacoes, total: total });
   } catch (err) {
     res.status(500).send(err.message);
   }
@@ -158,18 +168,6 @@ app.post("/nova-transacao/:tipo", async (req, res) => {
     });
 
     res.sendStatus(201);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-app.delete("/home", async (req, res) => {
-  const { authorization } = req.headers;
-  const token = authorization?.replace("Bearer ", "");
-
-  try {
-    await db.collection("sessions").deleteOne({ token: token });
-    res.sendStatus(204);
   } catch (err) {
     res.status(500).send(err.message);
   }
