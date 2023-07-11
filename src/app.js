@@ -173,5 +173,19 @@ app.post("/nova-transacao/:tipo", async (req, res) => {
   }
 });
 
+app.delete("/home", async (req, res) => {
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer ", "");
+
+  try {
+    const sessionDeleted = await db
+      .collection("sessions")
+      .deleteOne({ token: token });
+    res.status(204).send(sessionDeleted);
+  } catch (err) {
+    err.status(500).send(err.message);
+  }
+});
+
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log(`Servidor rodando na porta ${port}`));
